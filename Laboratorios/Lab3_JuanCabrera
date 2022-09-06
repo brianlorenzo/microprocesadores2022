@@ -1,0 +1,321 @@
+/*
+
+.ORG 0x0000
+    jmp		start_1		
+.ORG 0x001C 
+    jmp		_tmr0_int_parte_1
+
+.DSEG
+	contador_vueltas_timer: .BYTE 1
+	contador_segundos:		.BYTE 1
+	contador_vueltas:		.BYTE 1
+
+.CSEG
+
+start_1:
+	; Configurar valores iniciales
+	; --------------------------------------------------
+	ldi		XL,		LOW(contador_vueltas_timer)
+	ldi		XH,		HIGH(contador_vueltas_timer)
+	ldi 	r16,	125
+	st		X,		r16
+	
+	ldi		XL,		LOW(contador_segundos)
+	ldi		XH,		HIGH(contador_segundos)
+	ldi 	r16,	0
+	st		X,		r16
+	
+	ldi		XL,		LOW(contador_vueltas)
+	ldi		XH,		HIGH(contador_vueltas)
+	ldi		r16,	0
+	st		X,		r16
+
+	; --------------------------------------------------
+
+    ; configuro los puertos:
+    ; PB2 PB3 PB4 PB5 - son los LEDs del shield
+    ldi		r16,	0b00111101	
+    out		DDRB,	r16			; 4 LEDs del shield son salidas
+    out		PORTB,	r16			; apago los LEDs
+
+    ldi		r16,	0b00000000	
+    out		DDRC,	r16			; 3 botones del shield son entradas
+;-------------------------------------------------------------------------------------
+
+;Configuro el TMR0 y su interrupcion.
+    ldi		r16,	0b00000010	
+    out		TCCR0A,	r16			;configuro para que cuente hasta OCR0A y vuelve a cero (reset on compare), ahí dispara la interrupción
+    ldi		r16,	0b00000101	
+    out		TCCR0B,	r16			;prescaler = 1024
+    ldi		r16,	124	
+    out		OCR0A,	r16			;comparo con 125
+    ldi		r16,	0b00000010	
+    sts		TIMSK0,	r16			;habilito la interrupción (falta habilitar global)
+
+;-------------------------------------------------------------------------------------
+
+   sei							;habilito las interrupciones globales(set interrupt flag)
+
+loop1:
+contador_led:
+	ldi		XL,		LOW(contador_segundos)
+	ldi		XH,		HIGH(contador_segundos)
+	ld		r17,	X
+    cpi		r17,	2   ; pasaron 2 segundos
+    brne	continuar
+
+	ldi		r17,	0
+	st		X,		r17 ; se reinicia el contador de segundos
+
+	ldi		XL,		LOW(contador_vueltas)
+	ldi		XH,		HIGH(contador_vueltas)
+	ld		r17,	X
+
+	inc	    r17
+	st		X,		r17
+
+	in		r27,	PORTB
+	andi	r27,	0b11000111
+	andi	r17,    0b00000111
+	lsl		r17
+	lsl		r17
+	lsl 	r17
+	com		r17
+	andi	r17,	0b00111000
+	or		r17,	r27
+	out		PORTB,  r17
+continuar:
+    nop
+    nop
+    nop
+    nop
+    ori r16, 0xFF
+    nop
+    nop
+    nop
+    brne	loop1
+loop2:
+    nop
+    nop
+    nop
+fin:
+    rjmp loop2
+
+;RUTINAS
+;-------------------------------------------------------------------------------------
+
+; ------------------------------------------------
+; Rutina de atención a la interrupción del Timer0.
+; ------------------------------------------------
+; recordar que el timer 0 fue configurado para interrumpir cada 125 ciclos (5^3), y tiene un prescaler 1024 = 2^10.
+; El reloj de I/O está configurado @ Fclk = 16.000.000 Hz = 2^10*5^6; entonces voy a interrumpir 125 veces por segundo
+; esto sale de dividir Fclk por el prescaler y el valor de OCR0A.
+; 
+; Esta rutina por ahora no hace casi nada, Ud puede ir agregando funcionalidades.
+; Por ahora solo: cambia el valor de un LED en la placa, e incrementa un contador en r24.
+
+_tmr0_int_parte_1: ; (125 veces por segundo)
+    push	r16                                    ; 2
+	push	r17			                           ; 2
+	push	r26									   ; 2 (X)
+	push	r27									   ; 2 (X)
+
+    in		r16,	SREG                           ; 1
+
+	ldi		XL,		LOW(contador_vueltas_timer)    ; 1
+	ldi		XH,		HIGH(contador_vueltas_timer)   ; 1
+	ld		r17,	X							   ; 1
+    dec		r17									   ; 1
+	st		X,		r17							   ; 1
+
+    brne	_tmr0_out							   ; 1 / 2
+    sbi		PINB,	2							   ; 1
+	ldi		r17,	125							   ; 1
+	st		X,		r17							   ; 1
+	ldi		XL,		LOW(contador_segundos)         ; 1
+	ldi		XH,		HIGH(contador_segundos)        ; 1
+	ld		r17,	X							   ; 1
+	inc		r17									   ; 1
+	st		X,		r17							   ; 1
+_tmr0_out:
+    out SREG, r16       ; 1
+	pop r27
+	pop r26
+	pop r17             ; 2
+    pop r16             ; 2
+    reti                ; 4 (15)
+
+*/
+
+
+
+
+
+
+
+
+
+; /*
+
+.ORG 0x0000
+    jmp		start	
+.ORG 0x0008
+    jmp		_pcint1
+.ORG 0x001C 
+    jmp		_tmr0_int
+
+.DSEG
+	contador_vueltas_timer: .BYTE 1
+	contador_segundos:		.BYTE 1
+	contador_vueltas:		.BYTE 1
+
+.CSEG
+
+reset_variables:
+	push	r16
+	push	r26 ; (X)
+	push	r27	; (X)
+
+	ldi		XL,		LOW(contador_vueltas_timer)
+	ldi		XH,		HIGH(contador_vueltas_timer)
+	ldi 	r16,	125
+	st		X,		r16
+	
+	ldi		XL,		LOW(contador_segundos)
+	ldi		XH,		HIGH(contador_segundos)
+	ldi 	r16,	0
+	st		X,		r16
+	
+	ldi		XL,		LOW(contador_vueltas)
+	ldi		XH,		HIGH(contador_vueltas)
+	ldi		r16,	0
+	st		X,		r16
+
+	pop		r27
+	pop		r26
+	pop		r16
+	ret
+
+start:
+	rcall	reset_variables
+
+    ; configuro los puertos:
+    ; PB2 PB3 PB4 PB5 - son los LEDs del shield
+    ldi		r16,	0b00111101	
+    out		DDRB,	r16			; 4 LEDs del shield son salidas
+    out		PORTB,	r16			; apago los LEDs
+
+    ldi		r16,	0b00000000	
+    out		DDRC,	r16			; 3 botones del shield son entradas
+;-------------------------------------------------------------------------------------
+
+;Configuro el TMR0 y su interrupcion.
+    ldi		r16,	0b00000010	
+    out		TCCR0A,	r16			;configuro para que cuente hasta OCR0A y vuelve a cero (reset on compare), ahí dispara la interrupción
+    ldi		r16,	0b00000101	
+    out		TCCR0B,	r16			;prescaler = 1024
+    ldi		r16,	124	
+    out		OCR0A,	r16			;comparo con 125
+    ldi		r16,	0b00000010	
+    sts		TIMSK0,	r16			;habilito la interrupción (falta habilitar global)
+
+    ldi		r16,	0b00000010
+    sts		PCICR,  r16
+    ldi		r16,	0b00001110
+    sts		PCMSK1, r16
+
+;-------------------------------------------------------------------------------------
+
+   sei							;habilito las interrupciones globales(set interrupt flag)
+
+loop1:
+	; contador led
+	ldi		XL,		LOW(contador_segundos)
+	ldi		XH,		HIGH(contador_segundos)
+	ld		r17,	X
+	andi	r17,    0b00001111
+	lsl		r17
+	lsl 	r17
+	com		r17
+	andi	r17,	0b00111100
+	in		r18,	PORTB
+	andi	r18,	0b11000011
+	or		r17,	r18
+	out		PORTB,  r17
+	; --------------------------------
+
+    rjmp	loop1
+
+
+_tmr0_int: ; (125 veces por segundo)
+    push	r16                                    ; 2
+	push	r17			                           ; 2
+	push	r26									   ; 2 (X)
+	push	r27									   ; 2 (X)
+
+    in		r16,	SREG                           ; 1
+
+	ldi		XL,		LOW(contador_vueltas_timer)    ; 1
+	ldi		XH,		HIGH(contador_vueltas_timer)   ; 1
+	ld		r17,	X							   ; 1
+    dec		r17									   ; 1
+	st		X,		r17							   ; 1
+
+    brne	_tmr0_out							   ; 1 / 2
+    sbi		PINB,	2							   ; 1
+	ldi		r17,	125							   ; 1
+	st		X,		r17							   ; 1
+	ldi		XL,		LOW(contador_segundos)         ; 1
+	ldi		XH,		HIGH(contador_segundos)        ; 1
+	ld		r17,	X							   ; 1
+	inc		r17									   ; 1
+	st		X,		r17							   ; 1
+_tmr0_out:
+    out		SREG,	r16							   ; 1
+	pop		r27									   ; 2
+	pop		r26									   ; 2
+	pop		r17									   ; 2
+    pop		r16									   ; 2
+    reti										   ; 4 ()
+
+_pcint1:
+	push	r16
+	in		r16,	SREG
+
+	sbis	PINC,	1
+	rjmp	_pcint1_button_1
+
+	sbis	PINC,	2
+	rjmp	_pcint1_button_2
+
+_pcint1_out:
+	out		SREG,	r16
+	pop		r16
+	reti
+
+_pcint1_button_1:
+
+	push    r17
+	push	r18
+
+	lds		r18,	TIMSK0
+	ldi		r17,	0b00000010
+	eor		r18,	r17
+    sts		TIMSK0,	r18
+
+	pop		r17
+	pop		r18
+	rjmp	_pcint1_out
+
+_pcint1_button_2:
+
+	push    r17
+
+	rcall	reset_variables
+    ldi		r17,	0b00111101	
+    out		PORTB,	r17
+
+	pop		r17
+	rjmp	_pcint1_out
+
+; */
